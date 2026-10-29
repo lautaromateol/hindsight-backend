@@ -21,7 +21,7 @@ model Member {
   name        String
   imageUrl    String?
   role        Role
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workspaceId String
 
   @@unique([workspaceId, userId])

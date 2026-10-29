@@ -22,7 +22,8 @@ Los requisitos viven en el ERS (`docs/ers/`, un archivo por sprint). Al implemen
 - Auth: `clerkMiddleware()` global en `app.ts`; cada controlador llama `getAuth(req)` y lanza `HttpError(401)` si falta `userId`. Los datos del usuario (nombre, imagen) se leen con `clerkClient`.
 - Datos: Prisma 7 con `@prisma/adapter-pg` (`src/lib/prisma.ts`) sobre PostgreSQL. Hoy el esquema solo tiene `Workspace` y `Member` (rol `OWNER`/`MEMBER`); `Member.userId` es el id de Clerk.
 - Los controladores atrapan todo en un `try/catch` y traducen `HttpError` a su status.
-- Lo del ERS que sigue sin implementar: webhook, cola, decisiones, MCP, auditoría, RLS. Hoy no existe nada de eso.
+- Lo del ERS que sigue sin implementar: webhook, cola, decisiones, MCP y auditoría. Hoy no existe nada de eso.
+- Seguridad por filas: `Workspace` y `Member` tienen RLS (migración `row_level_security`). Los controladores abren `withUser(userId, fn)` ([src/lib/prisma.ts](src/lib/prisma.ts)) y hacen todas sus consultas con ese `tx`; fuera de ahí las políticas no ven al usuario. La API debe conectarse con un rol sin `BYPASSRLS` ni dueño de las tablas, y toda tabla nueva con datos de un workspace lleva sus políticas en la misma migración. Detalle en [docs/rls.md](docs/rls.md).
 
 ### Errores
 
