@@ -41,6 +41,7 @@ Al cerrar este sprint, el owner ve qué pasó en los PRs (cuántos tocaron decis
 - `POST /api/workspaces/:id/decisions/:number/review` (acción "Sigue vigente")
 - `PATCH /api/workspaces/:id` (configuración, solo owner)
   - Avance: existe `PUT /api/workspace/:id` (nombre e imagen, solo owner), adelantado en el sprint 1. Difiere del ERS en el método (`PUT`, no `PATCH`) y en la ruta (`/api/workspace`, singular). Falta lo de RF-S5-10 (umbral N, modo de aplicación predeterminado, quién responde).
+  - Avance: existe `DELETE /api/workspace/:id` (solo owner; borra el workspace y sus membresías en cascada), adelantado en el sprint 1. El ERS no lo define: se ubica aquí junto con la gestión del workspace por el owner.
 - `GET /api/workspaces/:id/coverage` y `GET /api/workspaces/:id/export` (.zip)
 - Tarea programada semanal para el resumen por email; el webhook también procesa todos los PRs mergeados (evento pull_request, acción closed), no solo los etiquetados
 - Externa: `GET /repos/{owner}/{repo}/pulls/{n}/files` y el árbol de carpetas de la API de GitHub
