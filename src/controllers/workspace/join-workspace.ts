@@ -3,7 +3,7 @@ import z from "zod";
 import { clerkClient, getAuth } from "@clerk/express";
 import { HttpError, sendError } from "../../lib/http-error.ts";
 import { normalizeInviteCode } from "../../lib/invite-code.ts";
-import { prisma } from "../../lib/prisma.ts";
+import { withUser } from "../../lib/prisma.ts";
 import { toWorkspaceListItem, workspaceItemInclude } from "../../lib/workspace-item.ts";
 import { joinWorkspaceSchema } from "../../schemas/workspace/index.ts";
 
@@ -28,15 +28,23 @@ export async function joinWorkspace(req: Request, res: Response) {
 
     const inviteCode = normalizeInviteCode(parsed.data.code);
 
-    const workspace = inviteCode
-      ? await prisma.workspace.findUnique({
+    if (!inviteCode) {
+      throw invalidInviteCode();
+    }
+
+    // Con el código fijado, la seguridad por filas deja ver solo el workspace que lo tiene.
+    const workspace = await withUser(
+      userId,
+      (tx) =>
+        tx.workspace.findUnique({
           where: { inviteCode },
           include: workspaceItemInclude(userId),
-        })
-      : null;
+        }),
+      { inviteCode },
+    );
 
     if (!workspace) {
-      throw new HttpError(404, "El código de invitación no es válido.", "INVALID_INVITE_CODE");
+      throw invalidInviteCode();
     }
 
     if (workspace.members.length) {
@@ -46,15 +54,20 @@ export async function joinWorkspace(req: Request, res: Response) {
     const user = await clerkClient.users.getUser(userId);
 
     try {
-      await prisma.member.create({
-        data: {
-          workspaceId: workspace.id,
-          userId,
-          name: user.fullName ?? user.username ?? "Usuario",
-          imageUrl: user.imageUrl,
-          role: "MEMBER",
-        },
-      });
+      await withUser(
+        userId,
+        (tx) =>
+          tx.member.create({
+            data: {
+              workspaceId: workspace.id,
+              userId,
+              name: user.fullName ?? user.username ?? "Usuario",
+              imageUrl: user.imageUrl,
+              role: "MEMBER",
+            },
+          }),
+        { inviteCode },
+      );
     } catch (error) {
       // Dos pedidos simultáneos: el índice único (workspaceId, userId) deja pasar solo uno.
       if ((error as { code?: string }).code === "P2002") {
@@ -70,11 +83,17 @@ export async function joinWorkspace(req: Request, res: Response) {
 }
 
 async function findItem(workspaceId: string, userId: string) {
-  const row = await prisma.workspace.findUniqueOrThrow({
-    where: { id: workspaceId },
-    include: workspaceItemInclude(userId),
-  });
+  const row = await withUser(userId, (tx) =>
+    tx.workspace.findUniqueOrThrow({
+      where: { id: workspaceId },
+      include: workspaceItemInclude(userId),
+    }),
+  );
   return toWorkspaceListItem(row);
+}
+
+function invalidInviteCode() {
+  return new HttpError(404, "El código de invitación no es válido.", "INVALID_INVITE_CODE");
 }
 
 function alreadyMember(workspace: ReturnType<typeof toWorkspaceListItem>) {

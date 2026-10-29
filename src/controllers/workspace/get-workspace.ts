@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { getAuth } from "@clerk/express";
 import { HttpError, sendError } from "../../lib/http-error.ts";
-import { prisma } from "../../lib/prisma.ts";
+import { withUser, workspaceExists } from "../../lib/prisma.ts";
 import { workspaceIdParamSchema } from "../../schemas/workspace/index.ts";
 
 export async function getWorkspace(req: Request, res: Response) {
@@ -23,33 +23,38 @@ export async function getWorkspace(req: Request, res: Response) {
 
     const { id } = parsedParams.data;
 
-    const workspace = await prisma.workspace.findUnique({
-      where: {
-        id: id as string,
-      },
-      include: {
-        members: {
-          where: {
-            userId,
-          },
-          select: {
-            userId: true,
-            role: true,
-          },
+    const workspace = await withUser(userId, async (tx) => {
+      const found = await tx.workspace.findUnique({
+        where: {
+          id: id as string,
         },
-        _count: { select: { members: true } },
-      },
+        include: {
+          members: {
+            where: {
+              userId,
+            },
+            select: {
+              userId: true,
+              role: true,
+            },
+          },
+          _count: { select: { members: true } },
+        },
+      });
+
+      // La seguridad por filas oculta los workspaces ajenos: se distingue 403 de 404 aparte.
+      if (!found && (await workspaceExists(tx, id as string))) {
+        throw new HttpError(
+          403,
+          "No estás autorizado a acceder al espacio de trabajo.",
+        );
+      }
+
+      return found;
     });
 
     if (!workspace) {
       throw new HttpError(404, "Espacio de trabajo no encontrado.");
-    }
-
-    if (!workspace.members.length) {
-      throw new HttpError(
-        403,
-        "No estás autorizado a acceder al espacio de trabajo.",
-      );
     }
 
     const { members, _count, inviteCode, ...rest } = workspace;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
-import { createWorkspace, getWorkspace, joinWorkspace, listWorkspaces } from "../src/controllers/workspace/index.ts";
+import { createWorkspace, deleteWorkspace, getWorkspace, joinWorkspace, listWorkspaces, updateWorkspace } from "../src/controllers/workspace/index.ts";
 import { generateInviteCode, normalizeInviteCode } from "../src/lib/invite-code.ts";
 import { joinWorkspaceSchema, workspaceListItemSchema, workspaceWithMembershipSchema } from "../src/schemas/workspace/index.ts";
 import { fakeReq, fakeRes, installFakeDb } from "./helpers/fake-env.ts";
@@ -200,5 +200,55 @@ describe("GET /api/workspace/:id", () => {
     const missing = fakeRes();
     await getWorkspace(fakeReq("ana", { params: { id: "nope" } }), missing);
     assert.equal(missing.statusCode, 404);
+  });
+});
+
+describe("PUT y DELETE /api/workspace/:id", () => {
+  test("aislamiento: un no miembro recibe 403 y el workspace queda intacto", async () => {
+    const ws = db.seedWorkspace("Equipo", "AAAA-2222", "ana");
+
+    const put = fakeRes();
+    await updateWorkspace(fakeReq("intruso", { params: { id: ws.id }, body: { name: "Mío" } }), put);
+    assert.equal(put.statusCode, 403);
+
+    const del = fakeRes();
+    await deleteWorkspace(fakeReq("intruso", { params: { id: ws.id } }), del);
+    assert.equal(del.statusCode, 403);
+
+    assert.equal(db.workspaces[0].name, "Equipo");
+    assert.equal(db.workspaces.length, 1);
+  });
+
+  test("un MEMBER no puede modificar ni eliminar; un id inexistente responde 404", async () => {
+    const ws = db.seedWorkspace("Equipo", "AAAA-2222", "ana");
+    db.seedMember(ws.id, "beto");
+
+    const put = fakeRes();
+    await updateWorkspace(fakeReq("beto", { params: { id: ws.id }, body: { name: "Mío" } }), put);
+    assert.equal(put.statusCode, 403);
+
+    const del = fakeRes();
+    await deleteWorkspace(fakeReq("beto", { params: { id: ws.id } }), del);
+    assert.equal(del.statusCode, 403);
+
+    const missing = fakeRes();
+    await deleteWorkspace(fakeReq("ana", { params: { id: "nope" } }), missing);
+    assert.equal(missing.statusCode, 404);
+  });
+
+  test("el OWNER modifica y elimina; al eliminar se van sus membresías", async () => {
+    const ws = db.seedWorkspace("Equipo", "AAAA-2222", "ana");
+    db.seedMember(ws.id, "beto");
+
+    const put = fakeRes();
+    await updateWorkspace(fakeReq("ana", { params: { id: ws.id }, body: { name: "Plataforma" } }), put);
+    assert.equal(put.statusCode, 200);
+    assert.equal(db.workspaces[0].name, "Plataforma");
+
+    const del = fakeRes();
+    await deleteWorkspace(fakeReq("ana", { params: { id: ws.id } }), del);
+    assert.equal(del.statusCode, 204);
+    assert.equal(db.workspaces.length, 0);
+    assert.equal(db.members.length, 0);
   });
 });

@@ -4,7 +4,7 @@ import { clerkClient, getAuth } from "@clerk/express";
 import { HttpError, sendError } from "../../lib/http-error.ts";
 import { generateInviteCode } from "../../lib/invite-code.ts";
 import { createWorkspaceSchema } from "../../schemas/workspace/index.ts";
-import { prisma } from "../../lib/prisma.ts";
+import { withUser } from "../../lib/prisma.ts";
 
 export async function createWorkspace(req: Request, res: Response) {
   try {
@@ -41,12 +41,12 @@ export async function createWorkspace(req: Request, res: Response) {
       },
     };
 
-    // El código es único en la base; ante la (improbable) colisión se genera otro.
+    // El código es único en la base; ante la (improbable) colisión se genera otro, en una transacción nueva.
     for (let attempt = 1; ; attempt++) {
       try {
-        const workspace = await prisma.workspace.create({
-          data: { ...data, inviteCode: generateInviteCode() },
-        });
+        const workspace = await withUser(userId, (tx) =>
+          tx.workspace.create({ data: { ...data, inviteCode: generateInviteCode() } }),
+        );
         return res.status(201).json(workspace);
       } catch (error) {
         if ((error as { code?: string }).code !== "P2002" || attempt >= 5) throw error;
