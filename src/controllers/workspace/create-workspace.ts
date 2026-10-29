@@ -1,8 +1,8 @@
 import type { Request, Response } from "express";
 import z from "zod";
 import { clerkClient, getAuth } from "@clerk/express";
-import { HttpError } from "../../lib/http-error.ts";
-import { randomBytes } from "node:crypto";
+import { HttpError, sendError } from "../../lib/http-error.ts";
+import { generateInviteCode } from "../../lib/invite-code.ts";
 import { createWorkspaceSchema } from "../../schemas/workspace/index.ts";
 import { prisma } from "../../lib/prisma.ts";
 
@@ -17,37 +17,42 @@ export async function createWorkspace(req: Request, res: Response) {
     const parsed = createWorkspaceSchema.safeParse(req.body);
 
     if (!parsed.success) {
-      return res.status(400).json({
-        message: "Datos invalidos",
-        errors: z.flattenError(parsed.error).fieldErrors,
-      });
+      throw new HttpError(
+        400,
+        "Datos invalidos",
+        "VALIDATION_ERROR",
+        z.flattenError(parsed.error).fieldErrors,
+      );
     }
 
     const { name } = parsed.data;
 
     const user = await clerkClient.users.getUser(userId);
 
-    const workspace = await prisma.workspace.create({
-      data: {
-        name,
-        inviteCode: randomBytes(4).toString("hex"),
-        members: {
-          create: {
-            userId,
-            name: user.fullName ?? user.username ?? "Usuario",
-            imageUrl: user.imageUrl,
-            role: "OWNER",
-          },
+    const data = {
+      name,
+      members: {
+        create: {
+          userId,
+          name: user.fullName ?? user.username ?? "Usuario",
+          imageUrl: user.imageUrl,
+          role: "OWNER" as const,
         },
       },
-    });
+    };
 
-    return res.status(201).json(workspace);
-  } catch (error) {
-    if (error instanceof HttpError) {
-      return res.status(error.status).json({ message: error.message });
+    // El código es único en la base; ante la (improbable) colisión se genera otro.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const workspace = await prisma.workspace.create({
+          data: { ...data, inviteCode: generateInviteCode() },
+        });
+        return res.status(201).json(workspace);
+      } catch (error) {
+        if ((error as { code?: string }).code !== "P2002" || attempt >= 5) throw error;
+      }
     }
-
-    return res.status(500).json({ message: "Error interno del servidor." });
+  } catch (error) {
+    return sendError(res, error);
   }
 }

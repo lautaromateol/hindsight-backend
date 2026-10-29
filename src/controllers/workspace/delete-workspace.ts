@@ -1,15 +1,16 @@
 import type { Request, Response } from "express";
 import { getAuth } from "@clerk/express";
-import { HttpError } from "../../lib/http-error.ts";
+import { HttpError, sendError } from "../../lib/http-error.ts";
 import { prisma } from "../../lib/prisma.ts";
+import { workspaceIdParamSchema } from "../../schemas/workspace/index.ts";
 
 export async function deleteWorkspace(req: Request, res: Response) {
   try {
-    const { id } = req.params;
+    const parsedParams = workspaceIdParamSchema.safeParse(req.params);
 
     const { userId } = getAuth(req);
 
-    if (!id) {
+    if (!parsedParams.success) {
       throw new HttpError(
         400,
         "El ID del espacio de trabajo no fue proporcionado.",
@@ -19,6 +20,8 @@ export async function deleteWorkspace(req: Request, res: Response) {
     if (!userId) {
       throw new HttpError(401, "Usuario no autenticado.");
     }
+
+    const { id } = parsedParams.data;
 
     const workspace = await prisma.workspace.findUnique({
       where: {
@@ -54,10 +57,6 @@ export async function deleteWorkspace(req: Request, res: Response) {
 
     return res.status(204).send();
   } catch (error) {
-    if (error instanceof HttpError) {
-      return res.status(error.status).json({ message: error.message });
-    }
-
-    return res.status(500).json({ message: "Error interno del servidor." });
+    return sendError(res, error);
   }
 }
