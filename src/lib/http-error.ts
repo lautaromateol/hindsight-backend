@@ -34,6 +34,7 @@ export function sendError(res: Response, error: unknown) {
     });
   }
 
+  console.error(error);
   return res.status(500).json({
     error: { code: "INTERNAL_ERROR", message: "Error interno del servidor." },
   });
