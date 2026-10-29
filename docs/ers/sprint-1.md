@@ -48,10 +48,20 @@ Al cerrar este sprint, una persona puede registrarse, crear un workspace o unirs
 
 ## Definición de hecho
 
-- [ ] El README explica cómo instalar y correr el proyecto en cinco comandos o menos
-- [ ] Las migraciones de base de datos están versionadas y se aplican de forma repetible
+- [x] El README explica cómo instalar y correr el proyecto en cinco comandos o menos
+- [x] Las migraciones de base de datos están versionadas y se aplican de forma repetible
 - [ ] Hay tests de API para la identificación del usuario con el token de Clerk y el aislamiento entre workspaces
+  - Avance: hay tests de aislamiento entre workspaces (unirse, ver, modificar, eliminar). Por decisión del equipo no se agregaron tests de la identificación con el token de Clerk, de los endpoints de perfil y miembros, ni de RLS contra base real (`test/rls.test.ts` existe y se omite sin `RLS_TEST_DATABASE_URL`).
 - [ ] El proyecto está desplegado con una URL pública
+  - Avance: `Dockerfile` y `fly.toml` listos (ver README); falta ejecutar `fly deploy` con la base y los secretos.
 - [ ] Demo de tres minutos: registro, creación de workspace, invitación y usuario de GitHub
 
 **Qué practicás.** Modelado relacional, integración con Clerk (sesiones y verificación de su token en la API), middlewares de Express, rutas protegidas en Next.js y despliegue.
+
+## Estado de implementación (backend)
+
+- RF-S1-04, 05, 06, 08: hechos. Las rutas van en singular (`/api/workspace`), no `/api/workspaces`.
+- RF-S1-07: `PATCH /api/auth/me` declara el usuario de GitHub (único entre cuentas, 409 si otra lo usa).
+- RF-S1-09: `GET /api/workspace/:workspaceId/member` (singular; el ERS dice `/api/workspaces/:id/members`).
+- RF-S1-10: la verificación la resuelve Clerk con la cuenta de GitHub vinculada (entró con GitHub o la vinculó después); `GET /api/auth/me` la lee. Por eso no existen `/api/auth/github` ni su callback, y el parámetro `state` (RNF-S1-05) lo maneja Clerk. El cliente debe ofrecer la vinculación a quien no entró con GitHub.
+- RF-S1-01, 02, 03: del lado del cliente; la API identifica al usuario con el token de Clerk.
