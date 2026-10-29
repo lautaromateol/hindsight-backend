@@ -1,6 +1,8 @@
 import z from "zod";
 import { createDocument } from "zod-openapi";
+import { profileSchema, updateProfileSchema } from "../schemas/auth/index.ts";
 import { errorSchema, meSchema } from "../schemas/error.ts";
+import { memberSchema, memberWorkspaceParamSchema } from "../schemas/member/index.ts";
 import {
   createWorkspaceSchema,
   joinWorkspaceSchema,
@@ -88,6 +90,68 @@ export function buildOpenApiDocument() {
           responses: {
             "200": { description: "Id de usuario de Clerk.", content: json(meSchema) },
             "401": unauthorized,
+          },
+        },
+      },
+      "/api/auth/me": {
+        get: {
+          operationId: "getProfile",
+          tags: ["auth"],
+          summary: "Perfil del usuario autenticado",
+          description:
+            "Nombre e imagen vienen de Clerk. Cada llamada alinea el usuario de GitHub con Clerk: si el usuario tiene una cuenta de GitHub " +
+            "vinculada y verificada (entró con GitHub o la vinculó después desde Google o correo), queda como `githubVerified: true` " +
+            "y `githubSource: \"clerk\"`; si la desvinculó, pasa a `declared`. El cliente debe llamar este endpoint al volver del flujo de vinculación de Clerk. " +
+            "Difiere del ERS: la verificación (RF-S1-10) la resuelve Clerk, por eso no existen `/api/auth/github` ni su callback.",
+          security,
+          responses: {
+            "200": { description: "Perfil.", content: json(profileSchema) },
+            "401": unauthorized,
+            "409": error("Otra cuenta ya tiene verificado ese usuario de GitHub.", {
+              code: "GITHUB_USERNAME_TAKEN",
+              message: "Ese usuario de GitHub ya está registrado en otra cuenta.",
+            }),
+            "500": serverError,
+          },
+        },
+        patch: {
+          operationId: "updateProfile",
+          tags: ["auth"],
+          summary: "Declarar el usuario de GitHub",
+          description:
+            "Para quien aún no vinculó GitHub en Clerk: el usuario queda declarado (`githubVerified: false`) y sirve para reconocerlo en un PR. " +
+            "Es único entre cuentas. `null` lo quita. Si el usuario ya tiene uno verificado por Clerk no se puede pisar a mano.",
+          security,
+          requestBody: { required: true, content: json(updateProfileSchema) },
+          responses: {
+            "200": { description: "Perfil actualizado.", content: json(profileSchema) },
+            "400": {
+              description: "Usuario de GitHub inválido (`VALIDATION_ERROR`, con `details` por campo).",
+              content: {
+                "application/json": {
+                  schema: errorSchema,
+                  example: {
+                    error: {
+                      code: "VALIDATION_ERROR",
+                      message: "Datos invalidos",
+                      details: { githubUsername: ["El usuario de GitHub no es válido."] },
+                    },
+                  },
+                },
+              },
+            },
+            "401": unauthorized,
+            "409": {
+              description:
+                "`GITHUB_USERNAME_TAKEN`: otra cuenta ya usa ese usuario de GitHub. `GITHUB_VERIFIED`: el usuario ya está verificado con la cuenta vinculada en Clerk.",
+              content: {
+                "application/json": {
+                  schema: errorSchema,
+                  example: { error: { code: "GITHUB_USERNAME_TAKEN", message: "Ese usuario de GitHub ya está registrado en otra cuenta." } },
+                },
+              },
+            },
+            "500": serverError,
           },
         },
       },
@@ -228,6 +292,26 @@ export function buildOpenApiDocument() {
             "400": validationError,
             "401": unauthorized,
             "403": error("El usuario no es `OWNER`.", { code: "FORBIDDEN", message: "No estás autorizado a eliminar el espacio de trabajo." }),
+            "404": error("No existe.", { code: "NOT_FOUND", message: "Espacio de trabajo no encontrado." }),
+            "500": serverError,
+          },
+        },
+      },
+      "/api/workspace/{workspaceId}/member": {
+        get: {
+          operationId: "listMembers",
+          tags: ["member"],
+          summary: "Listar los miembros de un espacio de trabajo",
+          description:
+            "Solo para miembros del espacio. Ordenados con los `OWNER` primero y luego por nombre. " +
+            "Difiere del ERS (`GET /api/workspaces/:id/members`): `workspace` y `member` van en singular.",
+          security,
+          requestParams: { path: memberWorkspaceParamSchema },
+          responses: {
+            "200": { description: "Miembros con su rol y su usuario de GitHub.", content: json(z.array(memberSchema)) },
+            "400": validationError,
+            "401": unauthorized,
+            "403": error("El usuario no es miembro.", { code: "FORBIDDEN", message: "No estás autorizado a acceder al espacio de trabajo." }),
             "404": error("No existe.", { code: "NOT_FOUND", message: "Espacio de trabajo no encontrado." }),
             "500": serverError,
           },

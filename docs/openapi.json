@@ -72,6 +72,204 @@
         }
       }
     },
+    "/api/auth/me": {
+      "get": {
+        "operationId": "getProfile",
+        "tags": [
+          "auth"
+        ],
+        "summary": "Perfil del usuario autenticado",
+        "description": "Nombre e imagen vienen de Clerk. Cada llamada alinea el usuario de GitHub con Clerk: si el usuario tiene una cuenta de GitHub vinculada y verificada (entró con GitHub o la vinculó después desde Google o correo), queda como `githubVerified: true` y `githubSource: \"clerk\"`; si la desvinculó, pasa a `declared`. El cliente debe llamar este endpoint al volver del flujo de vinculación de Clerk. Difiere del ERS: la verificación (RF-S1-10) la resuelve Clerk, por eso no existen `/api/auth/github` ni su callback.",
+        "security": [
+          {
+            "clerkSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Perfil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión válida de Clerk.",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Usuario no autenticado."
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Otra cuenta ya tiene verificado ese usuario de GitHub.",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "GITHUB_USERNAME_TAKEN",
+                    "message": "Ese usuario de GitHub ya está registrado en otra cuenta."
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error propio o de Clerk/base de datos.",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": "Error interno del servidor."
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateProfile",
+        "tags": [
+          "auth"
+        ],
+        "summary": "Declarar el usuario de GitHub",
+        "description": "Para quien aún no vinculó GitHub en Clerk: el usuario queda declarado (`githubVerified: false`) y sirve para reconocerlo en un PR. Es único entre cuentas. `null` lo quita. Si el usuario ya tiene uno verificado por Clerk no se puede pisar a mano.",
+        "security": [
+          {
+            "clerkSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "githubUsername": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[a-z\\d](?:[a-z\\d]|-(?=[a-z\\d])){0,38}$",
+                        "description": "Usuario de GitHub, sin `@`. Se guarda en minúscula.",
+                        "example": "octocat"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Usuario de GitHub declarado a mano (queda sin verificar). `null` lo quita."
+                  }
+                },
+                "required": [
+                  "githubUsername"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Perfil actualizado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Usuario de GitHub inválido (`VALIDATION_ERROR`, con `details` por campo).",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Datos invalidos",
+                    "details": {
+                      "githubUsername": [
+                        "El usuario de GitHub no es válido."
+                      ]
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión válida de Clerk.",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Usuario no autenticado."
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`GITHUB_USERNAME_TAKEN`: otra cuenta ya usa ese usuario de GitHub. `GITHUB_VERIFIED`: el usuario ya está verificado con la cuenta vinculada en Clerk.",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "GITHUB_USERNAME_TAKEN",
+                    "message": "Ese usuario de GitHub ya está registrado en otra cuenta."
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error propio o de Clerk/base de datos.",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": "Error interno del servidor."
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspace": {
       "get": {
         "operationId": "listWorkspaces",
@@ -802,6 +1000,135 @@
           }
         }
       }
+    },
+    "/api/workspace/{workspaceId}/member": {
+      "get": {
+        "operationId": "listMembers",
+        "tags": [
+          "member"
+        ],
+        "summary": "Listar los miembros de un espacio de trabajo",
+        "description": "Solo para miembros del espacio. Ordenados con los `OWNER` primero y luego por nombre. Difiere del ERS (`GET /api/workspaces/:id/members`): `workspace` y `member` van en singular.",
+        "security": [
+          {
+            "clerkSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspaceId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "ID del espacio de trabajo.",
+              "example": "0f8fad5b-d9cb-469f-a165-70867728950e"
+            },
+            "required": true,
+            "description": "ID del espacio de trabajo."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Miembros con su rol y su usuario de GitHub.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Member"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos (`VALIDATION_ERROR`, con `details` por campo) o ID ausente. Un JSON mal formado lo rechaza Express antes del controlador, con su respuesta por defecto (no usa este formato).",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Datos invalidos",
+                    "details": {
+                      "name": [
+                        "El nombre es obligatorio."
+                      ]
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión válida de Clerk.",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Usuario no autenticado."
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El usuario no es miembro.",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "FORBIDDEN",
+                    "message": "No estás autorizado a acceder al espacio de trabajo."
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe.",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Espacio de trabajo no encontrado."
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error propio o de Clerk/base de datos.",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": "Error interno del servidor."
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -846,6 +1173,60 @@
           "error"
         ],
         "additionalProperties": false
+      },
+      "Profile": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "githubUsername": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "githubVerified": {
+            "type": "boolean",
+            "description": "`true` si Clerk verificó el usuario con una cuenta de GitHub vinculada (entró con GitHub o la vinculó después)."
+          },
+          "githubSource": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GithubSource"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`clerk` si está verificado, `declared` si lo escribió a mano, `null` si no tiene. Con `declared` o `null` el cliente puede ofrecer vincular GitHub."
+          }
+        },
+        "required": [
+          "userId",
+          "name",
+          "imageUrl",
+          "githubUsername",
+          "githubVerified",
+          "githubSource"
+        ],
+        "additionalProperties": false
+      },
+      "GithubSource": {
+        "type": "string",
+        "enum": [
+          "clerk",
+          "declared"
+        ]
       },
       "WorkspaceListItem": {
         "type": "object",
@@ -994,6 +1375,47 @@
           "role",
           "memberCount",
           "members"
+        ],
+        "additionalProperties": false
+      },
+      "Member": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "Id de usuario de Clerk."
+          },
+          "name": {
+            "type": "string"
+          },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "$ref": "#/components/schemas/WorkspaceRole"
+          },
+          "githubUsername": {
+            "description": "`null` si todavía no registró su usuario de GitHub.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "githubVerified": {
+            "type": "boolean",
+            "description": "`true` si Clerk verificó el usuario con una cuenta de GitHub vinculada."
+          }
+        },
+        "required": [
+          "userId",
+          "name",
+          "imageUrl",
+          "role",
+          "githubUsername",
+          "githubVerified"
         ],
         "additionalProperties": false
       }

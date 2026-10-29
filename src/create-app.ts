@@ -1,9 +1,13 @@
 import express, { type Express, type Request, type Response, type Router } from 'express';
 import { clerkMiddleware, getAuth } from '@clerk/express';
+import auth from "./routes/auth/route.ts";
+import member from "./routes/member/route.ts";
 import workspace from "./routes/workspace/route.ts";
 
 // Routers montados; el test de cobertura de OpenAPI recorre esta lista.
 export const routerMounts: { path: string; router: Router }[] = [
+  { path: '/api/auth', router: auth },
+  { path: '/api/workspace/:workspaceId/member', router: member },
   { path: '/api/workspace', router: workspace },
 ];
 

@@ -35,7 +35,11 @@ export function listExpressRoutes(): string[] {
   for (const layer of stackOf(app)) {
     if (layer.name !== "mounted_app" && layer.name !== "router") continue;
 
-    const mount = routerMounts.find(({ path }) => layer.matchers.some((match) => match(path)));
+    // El matcher de una capa acepta cualquier ruta que empiece con su prefijo: si dos montajes coinciden
+    // (/api/workspace y /api/workspace/:workspaceId/member), el de la capa es el más corto.
+    const mount = routerMounts
+      .filter(({ path }) => layer.matchers.some((match) => match(path)))
+      .sort((a, b) => a.path.length - b.path.length)[0];
     if (!mount) {
       throw new Error("Hay un router montado que no está en routerMounts (src/create-app.ts).");
     }
