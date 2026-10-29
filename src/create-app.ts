@@ -11,6 +11,23 @@ export const routerMounts: { path: string; router: Router }[] = [
 export function createApp(): Express {
   const app: Express = express();
 
+  // CORS: el front corre en otro origen (puerto). Orígenes separados por coma en CORS_ORIGINS.
+  const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:3001').split(',').map((o) => o.trim());
+  app.use((req: Request, res: Response, next) => {
+    const origin = req.headers.origin;
+    if (origin && allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type');
+    }
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  });
+
   app.use(clerkMiddleware());
   app.use(express.json())
 
