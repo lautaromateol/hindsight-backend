@@ -27,6 +27,14 @@ model Member {
   @@unique([workspaceId, userId])
 }
 
+// Perfil por usuario de Clerk. El usuario de GitHub es único entre cuentas (RF-S1-07);
+// githubVerified indica que Clerk lo verificó con una cuenta GitHub vinculada (RF-S1-10).
+model Profile {
+  userId         String  @id
+  githubUsername String? @unique
+  githubVerified Boolean @default(false)
+}
+
 enum Role {
   MEMBER
   OWNER
