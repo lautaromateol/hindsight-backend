@@ -12,7 +12,7 @@ model Workspace {
   name       String
   imageUrl   String?
   members    Member[]
-  inviteCode String
+  inviteCode String   @unique
 }
 
 model Member {
@@ -23,6 +23,8 @@ model Member {
   role        Role
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   workspaceId String
+
+  @@unique([workspaceId, userId])
 }
 
 enum Role {
