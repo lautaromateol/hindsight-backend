@@ -20,7 +20,7 @@ Los requisitos viven en el ERS (`docs/ers/`, un archivo por sprint). Al implemen
 - ESM con TypeScript ejecutado directo por `tsx`; `tsc` compila a `dist/`. Los imports relativos llevan extensión `.ts` (`rewriteRelativeImportExtensions`), y `erasableSyntaxOnly` prohíbe `enum`/parameter properties de TS.
 - Capas por recurso: `src/routes/<recurso>/route.ts` → `src/controllers/<recurso>/<accion>.ts` (re-exportados en `index.ts`) → `src/schemas/<recurso>/` (Zod 4). Las rutas se montan en `src/app.ts` bajo `/api/<recurso>`.
 - Auth: `clerkMiddleware()` global en `app.ts`; cada controlador llama `getAuth(req)` y lanza `HttpError(401)` si falta `userId`. Los datos del usuario (nombre, imagen) se leen con `clerkClient`.
-- Datos: Prisma 7 con `@prisma/adapter-neon` (`src/lib/prisma.ts`) sobre PostgreSQL. Hoy el esquema solo tiene `Workspace` y `Member` (rol `OWNER`/`MEMBER`); `Member.userId` es el id de Clerk.
+- Datos: Prisma 7 con `@prisma/adapter-pg` (`src/lib/prisma.ts`) sobre PostgreSQL. Hoy el esquema solo tiene `Workspace` y `Member` (rol `OWNER`/`MEMBER`); `Member.userId` es el id de Clerk.
 - Los controladores atrapan todo en un `try/catch` y traducen `HttpError` a su status.
 - Lo del ERS que sigue sin implementar: webhook, cola, decisiones, MCP, auditoría, RLS. Hoy no existe nada de eso.
 
